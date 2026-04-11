@@ -1,374 +1,445 @@
-﻿const STORAGE_KEY = "signal-board-posts";
+﻿const PROFILE_ID_KEY = "class-3-1-author-id";
+const PROFILE_NAME_KEY = "class-3-1-author-name";
+const DEFAULT_ROOM_SLUG = "class-3-1-passion-on";
+const DEFAULT_ROOM_LABEL = "3-1반 열정 ON!";
+const DEFAULT_POLL_INTERVAL = 4000;
 
-const samplePosts = [
-  {
-    id: "sample-1",
-    title: "4월 서비스 점검 일정 안내",
-    author: "운영팀",
-    category: "공지",
-    tags: ["maintenance", "infra"],
-    content:
-      "4월 18일 금요일 22:00부터 23:30까지 인증 서버 점검이 진행됩니다.\n점검 시간 동안 일부 기능이 지연될 수 있으니 주요 작업은 사전에 마무리해 주세요.",
-    createdAt: "2026-04-10T09:30:00+09:00",
-    pinned: true,
-    views: 42
-  },
-  {
-    id: "sample-2",
-    title: "봄맞이 UI 업데이트 배포",
-    author: "프런트엔드팀",
-    category: "업데이트",
-    tags: ["release", "design"],
-    content:
-      "대시보드 카드 레이아웃과 검색 패널 상호작용을 개선했습니다.\n모바일 화면에서 툴바가 먼저 보이도록 우선순위도 조정했습니다.",
-    createdAt: "2026-04-09T14:20:00+09:00",
-    pinned: false,
-    views: 27
-  },
-  {
-    id: "sample-3",
-    title: "사내 해커톤 참가 팀 모집",
-    author: "문화TF",
-    category: "이벤트",
-    tags: ["hackathon", "team"],
-    content:
-      "5월 첫째 주 사내 해커톤을 진행합니다.\n참가를 원하는 팀은 금요일까지 주제와 팀원 명단을 공유해 주세요.",
-    createdAt: "2026-04-08T11:05:00+09:00",
-    pinned: false,
-    views: 18
-  }
+const palette = [
+  ["#f0a43e", "#db6b10"],
+  ["#8db7ff", "#5076d2"],
+  ["#76c4a9", "#2b8e71"],
+  ["#f6a8b5", "#df6a86"],
+  ["#c7a2ff", "#8461d4"]
 ];
 
-const form = document.querySelector("#postForm");
-const postList = document.querySelector("#postList");
+const config = window.CHAT_CONFIG || {};
+const isConfigured = Boolean(
+  typeof config.supabaseUrl === "string" &&
+  config.supabaseUrl.startsWith("https://") &&
+  typeof config.supabasePublishableKey === "string" &&
+  config.supabasePublishableKey &&
+  !config.supabasePublishableKey.includes("YOUR_")
+);
+
+const roomSlug = config.roomSlug || DEFAULT_ROOM_SLUG;
+const roomLabel = config.roomLabel || DEFAULT_ROOM_LABEL;
+const pollIntervalMs = Number(config.pollIntervalMs) > 999 ? Number(config.pollIntervalMs) : DEFAULT_POLL_INTERVAL;
+
+const messageList = document.querySelector("#messageList");
 const emptyState = document.querySelector("#emptyState");
-const searchInput = document.querySelector("#searchInput");
-const categoryFilter = document.querySelector("#categoryFilter");
-const sortSelect = document.querySelector("#sortSelect");
-const resultCount = document.querySelector("#resultCount");
-const restoreSamplesButton = document.querySelector("#restoreSamplesButton");
-const resetFiltersButton = document.querySelector("#resetFiltersButton");
-const exportButton = document.querySelector("#exportButton");
-const tagCloud = document.querySelector("#tagCloud");
-const detailModal = document.querySelector("#detailModal");
-const modalBackdrop = document.querySelector("#modalBackdrop");
-const closeModalButton = document.querySelector("#closeModalButton");
-const modalCategory = document.querySelector("#modalCategory");
-const modalTitle = document.querySelector("#modalTitle");
-const modalMeta = document.querySelector("#modalMeta");
-const modalTags = document.querySelector("#modalTags");
-const modalContent = document.querySelector("#modalContent");
+const emptyText = document.querySelector("#emptyText");
+const emptyRefreshButton = document.querySelector("#emptyRefreshButton");
+const roomBadge = document.querySelector("#roomBadge");
+const messageForm = document.querySelector("#messageForm");
+const messageInput = document.querySelector("#messageInput");
+const authorStatus = document.querySelector("#authorStatus");
+const profileButton = document.querySelector("#profileButton");
+const profileButtonText = document.querySelector("#profileButtonText");
+const syncStatus = document.querySelector("#syncStatus");
+const sendButton = document.querySelector("#sendButton");
+const scrollBottomButton = document.querySelector("#scrollBottomButton");
+const focusInputButton = document.querySelector("#focusInputButton");
+const emojiButton = document.querySelector("#emojiButton");
+const menuButton = document.querySelector("#menuButton");
+const menuPanel = document.querySelector("#menuPanel");
+const renameButton = document.querySelector("#renameButton");
+const refreshButton = document.querySelector("#refreshButton");
+const statusTime = document.querySelector("#statusTime");
+const chatRoom = document.querySelector("#chatRoom");
+const setupBanner = document.querySelector("#setupBanner");
 
-const metrics = {
-  total: document.querySelector("#totalPostsMetric"),
-  pinned: document.querySelector("#pinnedPostsMetric"),
-  categories: document.querySelector("#categoryMetric"),
-  views: document.querySelector("#viewsMetric")
-};
-
-const formatter = new Intl.DateTimeFormat("ko-KR", {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
+const timeFormatter = new Intl.DateTimeFormat("ko-KR", {
+  hour: "numeric",
   minute: "2-digit"
 });
 
 const state = {
-  posts: loadPosts()
+  messages: [],
+  authorId: loadAuthorId(),
+  authorName: loadAuthorName(),
+  fetchTimer: null,
+  isFetching: false,
+  lastSignature: "",
+  lastError: ""
 };
 
-function loadPosts() {
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-  if (!saved) {
-    return [...samplePosts];
+function createAuthorId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+
+  return `author-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function loadAuthorId() {
+  const saved = window.localStorage.getItem(PROFILE_ID_KEY);
+  if (saved) {
+    return saved;
+  }
+
+  const next = createAuthorId();
+  window.localStorage.setItem(PROFILE_ID_KEY, next);
+  return next;
+}
+
+function loadAuthorName() {
+  const saved = window.localStorage.getItem(PROFILE_NAME_KEY);
+  if (saved) {
+    return saved;
+  }
+
+  const fallback = `익명${Math.floor(Math.random() * 90 + 10)}`;
+  window.localStorage.setItem(PROFILE_NAME_KEY, fallback);
+  return fallback;
+}
+
+function saveAuthorName(name) {
+  state.authorName = name;
+  window.localStorage.setItem(PROFILE_NAME_KEY, name);
+  updateAuthorUI();
+}
+
+function buildHeaders(extra = {}) {
+  return {
+    apikey: config.supabasePublishableKey,
+    Authorization: `Bearer ${config.supabasePublishableKey}`,
+    "Content-Type": "application/json",
+    ...extra
+  };
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(`${config.supabaseUrl}${path}`, {
+    ...options,
+    headers: buildHeaders(options.headers || {})
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `HTTP ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  return response.json();
+}
+
+function getAvatarColors(author) {
+  const sum = [...author].reduce((total, letter) => total + letter.charCodeAt(0), 0);
+  return palette[sum % palette.length];
+}
+
+function setSyncStatus(kind, text) {
+  syncStatus.textContent = text;
+  syncStatus.className = `sync-pill ${kind}`;
+}
+
+function updateAuthorUI() {
+  authorStatus.textContent = state.authorName;
+  profileButtonText.textContent = state.authorName.slice(0, 1);
+}
+
+function resizeTextarea() {
+  messageInput.style.height = "auto";
+  messageInput.style.height = `${Math.min(messageInput.scrollHeight, 112)}px`;
+}
+
+function closeMenu() {
+  menuPanel.classList.add("hidden");
+  menuButton.setAttribute("aria-expanded", "false");
+}
+
+function toggleMenu() {
+  const nextHidden = !menuPanel.classList.contains("hidden");
+  menuPanel.classList.toggle("hidden", nextHidden);
+  menuButton.setAttribute("aria-expanded", String(!nextHidden));
+}
+
+function updateStatusTime() {
+  statusTime.textContent = timeFormatter.format(new Date());
+}
+
+function applyComposerState() {
+  const disabled = !isConfigured;
+  messageInput.disabled = disabled;
+  sendButton.disabled = disabled;
+  emojiButton.disabled = disabled;
+  emptyRefreshButton.disabled = disabled;
+  if (disabled) {
+    messageInput.placeholder = "config.js와 Supabase 설정 후 사용하세요";
+  }
+}
+
+function createMessageElement(message) {
+  const row = document.createElement("article");
+  const mine = message.authorId === state.authorId;
+  row.className = `message-row ${mine ? "me" : "other"}`;
+
+  if (!mine) {
+    const avatar = document.createElement("div");
+    const [start, end] = getAvatarColors(message.authorName || "익명");
+    avatar.className = "avatar";
+    avatar.style.background = `linear-gradient(135deg, ${start}, ${end})`;
+    avatar.textContent = (message.authorName || "익명").slice(0, 1);
+    row.append(avatar);
+  }
+
+  const stack = document.createElement("div");
+  stack.className = "message-stack";
+
+  if (!mine) {
+    const name = document.createElement("div");
+    name.className = "message-name";
+    name.textContent = message.authorName || "익명";
+    stack.append(name);
+  }
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = message.body;
+  stack.append(bubble);
+
+  const time = document.createElement("div");
+  time.className = "message-time";
+  time.textContent = timeFormatter.format(new Date(message.createdAt));
+  stack.append(time);
+
+  row.append(stack);
+  return row;
+}
+
+function renderMessages() {
+  roomBadge.textContent = `${roomLabel} · 실시간 공유중`;
+  messageList.innerHTML = "";
+
+  const hasMessages = state.messages.length > 0;
+  emptyState.classList.toggle("hidden", hasMessages);
+  messageList.classList.toggle("hidden", !hasMessages);
+  emptyText.textContent = state.lastError || (isConfigured ? "메시지가 아직 없습니다." : "Supabase 설정을 완료하면 대화가 보입니다.");
+
+  if (!hasMessages) {
+    return;
+  }
+
+  state.messages.forEach((message) => {
+    messageList.append(createMessageElement(message));
+  });
+
+  requestAnimationFrame(() => {
+    chatRoom.scrollTop = chatRoom.scrollHeight;
+  });
+}
+
+function signatureForMessages(messages) {
+  return messages.map((message) => `${message.id}:${message.createdAt}`).join("|");
+}
+
+async function fetchMessages({ silent = false } = {}) {
+  if (!isConfigured || state.isFetching) {
+    return;
+  }
+
+  state.isFetching = true;
+  if (!silent) {
+    setSyncStatus("warn", "불러오는 중");
   }
 
   try {
-    const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : [...samplePosts];
+    const params = new URLSearchParams({
+      select: "id,author_id,author_name,body,created_at",
+      room_slug: `eq.${roomSlug}`,
+      order: "created_at.asc"
+    });
+
+    const rows = await apiRequest(`/rest/v1/messages?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json"
+      }
+    });
+
+    const messages = rows.map((row) => ({
+      id: row.id,
+      authorId: row.author_id,
+      authorName: row.author_name,
+      body: row.body,
+      createdAt: row.created_at
+    }));
+
+    const nextSignature = signatureForMessages(messages);
+    const changed = nextSignature !== state.lastSignature;
+    state.messages = messages;
+    state.lastSignature = nextSignature;
+    state.lastError = "";
+    setSyncStatus("ok", `연결됨 · ${messages.length}개`);
+
+    if (changed) {
+      renderMessages();
+    } else if (!silent) {
+      renderMessages();
+    }
   } catch (error) {
-    console.error("게시글 저장소를 불러오지 못했습니다.", error);
-    return [...samplePosts];
+    console.error(error);
+    state.lastError = "메시지를 불러오지 못했습니다. 설정과 RLS 정책을 확인하세요.";
+    setSyncStatus("error", "연결 오류");
+    renderMessages();
+  } finally {
+    state.isFetching = false;
   }
 }
 
-function savePosts() {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state.posts));
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function getUniqueCategories(posts) {
-  return [...new Set(posts.map((post) => post.category))].sort((left, right) =>
-    left.localeCompare(right, "ko")
-  );
-}
-
-function getFilteredPosts() {
-  const query = searchInput.value.trim().toLowerCase();
-  const category = categoryFilter.value;
-  const sort = sortSelect.value;
-
-  let posts = state.posts.filter((post) => {
-    const searchable = [post.title, post.content, post.author, ...(post.tags || [])]
-      .join(" ")
-      .toLowerCase();
-    const matchesQuery = query ? searchable.includes(query) : true;
-    const matchesCategory = category === "전체" ? true : post.category === category;
-    return matchesQuery && matchesCategory;
-  });
-
-  posts = posts.sort((left, right) => {
-    if (left.pinned !== right.pinned) {
-      return left.pinned ? -1 : 1;
-    }
-
-    if (sort === "views") {
-      return (right.views || 0) - (left.views || 0);
-    }
-
-    if (sort === "title") {
-      return left.title.localeCompare(right.title, "ko");
-    }
-
-    return new Date(right.createdAt) - new Date(left.createdAt);
-  });
-
-  return posts;
-}
-
-function renderCategoryOptions() {
-  const currentValue = categoryFilter.value || "전체";
-  const categories = getUniqueCategories(state.posts);
-  categoryFilter.innerHTML = [
-    '<option value="전체">전체</option>',
-    ...categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
-  ].join("");
-
-  categoryFilter.value = categories.includes(currentValue) || currentValue === "전체" ? currentValue : "전체";
-}
-
-function renderMetrics() {
-  const categories = getUniqueCategories(state.posts);
-  const totalViews = state.posts.reduce((sum, post) => sum + (post.views || 0), 0);
-
-  metrics.total.textContent = state.posts.length.toString();
-  metrics.pinned.textContent = state.posts.filter((post) => post.pinned).length.toString();
-  metrics.categories.textContent = categories.length.toString();
-  metrics.views.textContent = totalViews.toString();
-}
-
-function renderTagCloud() {
-  const counts = new Map();
-
-  state.posts.forEach((post) => {
-    (post.tags || []).forEach((tag) => {
-      const key = tag.trim();
-      if (!key) {
-        return;
-      }
-      counts.set(key, (counts.get(key) || 0) + 1);
-    });
-  });
-
-  const topTags = [...counts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "ko"))
-    .slice(0, 8);
-
-  if (topTags.length === 0) {
-    tagCloud.innerHTML = '<span class="meta-chip">아직 태그가 없습니다.</span>';
+async function sendMessage(text) {
+  if (!isConfigured) {
     return;
   }
 
-  tagCloud.innerHTML = topTags
-    .map(([tag, count]) => `<button class="tag-pill" type="button" data-tag="${escapeHtml(tag)}">#${escapeHtml(tag)} <span>${count}</span></button>`)
-    .join("");
+  setSyncStatus("warn", "전송 중");
 
-  tagCloud.querySelectorAll("[data-tag]").forEach((button) => {
-    button.addEventListener("click", () => {
-      searchInput.value = button.dataset.tag || "";
-      renderBoard();
+  try {
+    await apiRequest("/rest/v1/messages", {
+      method: "POST",
+      headers: {
+        Prefer: "return=representation"
+      },
+      body: JSON.stringify([
+        {
+          room_slug: roomSlug,
+          author_id: state.authorId,
+          author_name: state.authorName,
+          body: text
+        }
+      ])
     });
-  });
+
+    messageInput.value = "";
+    resizeTextarea();
+    await fetchMessages();
+  } catch (error) {
+    console.error(error);
+    state.lastError = "메시지 전송에 실패했습니다. config.js와 supabase.sql 설정을 확인하세요.";
+    setSyncStatus("error", "전송 실패");
+    renderMessages();
+  }
 }
 
-function renderBoard() {
-  const filteredPosts = getFilteredPosts();
-  resultCount.textContent = `${filteredPosts.length}건`;
-  postList.innerHTML = "";
-
-  emptyState.classList.toggle("hidden", filteredPosts.length > 0);
-
-  filteredPosts.forEach((post, index) => {
-    const article = document.createElement("article");
-    article.className = "post-card";
-    article.style.animationDelay = `${index * 45}ms`;
-    article.dataset.id = post.id;
-
-    const tagsMarkup = (post.tags || [])
-      .map((tag) => `<span class="tag-pill">#${escapeHtml(tag)}</span>`)
-      .join("");
-
-    article.innerHTML = `
-      <div class="post-topline">
-        <span class="badge">${escapeHtml(post.category)}</span>
-        ${post.pinned ? '<span class="badge badge-pin">Pinned</span>' : ""}
-      </div>
-      <h3 class="post-title">${escapeHtml(post.title)}</h3>
-      <div class="post-meta">
-        <span class="meta-chip">${escapeHtml(post.author)}</span>
-        <span class="meta-chip">${formatter.format(new Date(post.createdAt))}</span>
-      </div>
-      <p class="post-excerpt">${escapeHtml(post.content.slice(0, 110))}${post.content.length > 110 ? "..." : ""}</p>
-      <div class="post-tags">${tagsMarkup}</div>
-      <div class="post-footer">
-        <span>조회 ${post.views || 0}</span>
-        <button class="button post-delete" data-delete-id="${escapeHtml(post.id)}" type="button">삭제</button>
-      </div>
-    `;
-
-    article.addEventListener("click", (event) => {
-      if (event.target instanceof HTMLElement && event.target.closest("[data-delete-id]")) {
-        return;
-      }
-      openModal(post.id);
-    });
-
-    const deleteButton = article.querySelector("[data-delete-id]");
-    deleteButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      deletePost(post.id);
-    });
-
-    postList.append(article);
-  });
-}
-
-function openModal(postId) {
-  const post = state.posts.find((item) => item.id === postId);
-  if (!post) {
+function promptForName() {
+  const next = window.prompt("표시할 이름을 입력하세요.", state.authorName);
+  if (!next) {
     return;
   }
 
-  post.views = (post.views || 0) + 1;
-  savePosts();
-  renderMetrics();
-  renderBoard();
+  const trimmed = next.trim().slice(0, 20);
+  if (!trimmed) {
+    return;
+  }
 
-  modalCategory.textContent = post.category;
-  modalTitle.textContent = post.title;
-  modalMeta.innerHTML = [
-    `<span class="meta-chip">${escapeHtml(post.author)}</span>`,
-    `<span class="meta-chip">${formatter.format(new Date(post.createdAt))}</span>`,
-    `<span class="meta-chip">조회 ${post.views}</span>`
-  ].join("");
-  modalTags.innerHTML = (post.tags || [])
-    .map((tag) => `<span class="tag-pill">#${escapeHtml(tag)}</span>`)
-    .join("");
-  modalContent.textContent = post.content;
-  detailModal.classList.remove("hidden");
-  detailModal.setAttribute("aria-hidden", "false");
+  saveAuthorName(trimmed);
+  closeMenu();
 }
 
-function closeModal() {
-  detailModal.classList.add("hidden");
-  detailModal.setAttribute("aria-hidden", "true");
+function startPolling() {
+  if (!isConfigured) {
+    return;
+  }
+
+  if (state.fetchTimer) {
+    window.clearInterval(state.fetchTimer);
+  }
+
+  state.fetchTimer = window.setInterval(() => {
+    fetchMessages({ silent: true });
+  }, pollIntervalMs);
 }
 
-function deletePost(postId) {
-  state.posts = state.posts.filter((post) => post.id !== postId);
-  savePosts();
-  renderAll();
+function showSetupState() {
+  setupBanner.classList.toggle("hidden", isConfigured);
+  if (isConfigured) {
+    return;
+  }
+
+  setSyncStatus("warn", "설정 필요");
+  state.lastError = "config.js에 Supabase URL과 anon key를 넣은 뒤 다시 열어주세요.";
+  renderMessages();
 }
 
-function normalizeTags(rawTags) {
-  return rawTags
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 6);
-}
-
-function renderAll() {
-  renderCategoryOptions();
-  renderMetrics();
-  renderTagCloud();
-  renderBoard();
-}
-
-form.addEventListener("submit", (event) => {
+messageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-
-  const formData = new FormData(form);
-  const title = String(formData.get("title") || "").trim();
-  const author = String(formData.get("author") || "").trim();
-  const category = String(formData.get("category") || "일반").trim();
-  const tags = normalizeTags(String(formData.get("tags") || ""));
-  const content = String(formData.get("content") || "").trim();
-  const pinned = formData.get("pin") === "on";
-
-  if (!title || !author || !content) {
+  const text = messageInput.value.trim();
+  if (!text) {
     return;
   }
 
-  state.posts.unshift({
-    id: `${Date.now()}`,
-    title,
-    author,
-    category,
-    tags,
-    content,
-    createdAt: new Date().toISOString(),
-    pinned,
-    views: 0
-  });
-
-  savePosts();
-  form.reset();
-  renderAll();
+  await sendMessage(text);
+  messageInput.focus();
 });
 
-searchInput.addEventListener("input", renderBoard);
-categoryFilter.addEventListener("change", renderBoard);
-sortSelect.addEventListener("change", renderBoard);
-
-resetFiltersButton.addEventListener("click", () => {
-  searchInput.value = "";
-  categoryFilter.value = "전체";
-  sortSelect.value = "recent";
-  renderBoard();
+messageInput.addEventListener("input", resizeTextarea);
+messageInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    messageForm.requestSubmit();
+  }
 });
 
-restoreSamplesButton.addEventListener("click", () => {
-  state.posts = [...samplePosts];
-  savePosts();
-  renderAll();
+profileButton.addEventListener("click", promptForName);
+renameButton.addEventListener("click", promptForName);
+refreshButton.addEventListener("click", async () => {
+  closeMenu();
+  await fetchMessages();
+});
+emptyRefreshButton.addEventListener("click", async () => {
+  await fetchMessages();
+});
+scrollBottomButton.addEventListener("click", () => {
+  chatRoom.scrollTo({ top: chatRoom.scrollHeight, behavior: "smooth" });
+});
+focusInputButton.addEventListener("click", () => {
+  messageInput.focus();
+  closeMenu();
+});
+emojiButton.addEventListener("click", () => {
+  messageInput.value += messageInput.value ? " 🙂" : "🙂";
+  resizeTextarea();
+  messageInput.focus();
+});
+menuButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleMenu();
 });
 
-exportButton.addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(state.posts, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "signal-board-posts.json";
-  link.click();
-  URL.revokeObjectURL(url);
+document.addEventListener("click", (event) => {
+  if (!(event.target instanceof HTMLElement)) {
+    return;
+  }
+
+  if (!event.target.closest("#menuPanel") && !event.target.closest("#menuButton")) {
+    closeMenu();
+  }
 });
 
-closeModalButton.addEventListener("click", closeModal);
-modalBackdrop.addEventListener("click", closeModal);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    closeModal();
+    closeMenu();
   }
 });
 
-renderAll();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    fetchMessages({ silent: true });
+  }
+});
+
+updateStatusTime();
+updateAuthorUI();
+resizeTextarea();
+applyComposerState();
+showSetupState();
+window.setInterval(updateStatusTime, 60_000);
+
+if (isConfigured) {
+  fetchMessages();
+  startPolling();
+}
+
