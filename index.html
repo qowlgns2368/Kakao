@@ -1,0 +1,182 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signal Board</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="background-glow background-glow-left"></div>
+  <div class="background-glow background-glow-right"></div>
+
+  <header class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">HTTPS Bulletin Board</p>
+      <h1>Signal Board</h1>
+      <p class="hero-text">
+        보안 연결 위에서 동작하는 팀 공지형 게시판입니다. 글 작성, 검색, 정렬, 태그 탐색을 한 화면에서 처리하도록 구성했습니다.
+      </p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="#composer">새 글 작성</a>
+        <button class="button button-secondary" id="restoreSamplesButton" type="button">샘플 복원</button>
+      </div>
+    </div>
+
+    <div class="hero-status panel">
+      <div class="status-header">
+        <span class="status-dot"></span>
+        <span>Secure Local Feed</span>
+      </div>
+      <div class="metric-grid">
+        <article class="metric-card">
+          <span class="metric-label">총 게시물</span>
+          <strong id="totalPostsMetric">0</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">고정 공지</span>
+          <strong id="pinnedPostsMetric">0</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">활성 카테고리</span>
+          <strong id="categoryMetric">0</strong>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">누적 조회</span>
+          <strong id="viewsMetric">0</strong>
+        </article>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="panel composer" id="composer">
+      <div class="section-heading">
+        <p class="section-kicker">Post Composer</p>
+        <h2>새 글 작성</h2>
+      </div>
+
+      <form id="postForm" class="post-form">
+        <div class="form-row">
+          <label>
+            제목
+            <input id="titleInput" name="title" type="text" maxlength="80" placeholder="예: 4월 릴리스 점검 안내" required>
+          </label>
+          <label>
+            작성자
+            <input id="authorInput" name="author" type="text" maxlength="24" placeholder="예: 운영팀" required>
+          </label>
+        </div>
+
+        <div class="form-row">
+          <label>
+            카테고리
+            <select id="categoryInput" name="category">
+              <option value="공지">공지</option>
+              <option value="업데이트">업데이트</option>
+              <option value="일반">일반</option>
+              <option value="질문">질문</option>
+              <option value="이벤트">이벤트</option>
+            </select>
+          </label>
+          <label>
+            태그
+            <input id="tagsInput" name="tags" type="text" maxlength="60" placeholder="쉼표로 구분: release, infra">
+          </label>
+        </div>
+
+        <label class="full-width">
+          내용
+          <textarea id="contentInput" name="content" rows="7" maxlength="1200" placeholder="게시글 내용을 입력하세요." required></textarea>
+        </label>
+
+        <div class="form-footer">
+          <label class="checkbox">
+            <input id="pinInput" name="pin" type="checkbox">
+            <span>상단 고정 공지로 등록</span>
+          </label>
+          <button class="button button-primary" type="submit">게시하기</button>
+        </div>
+      </form>
+    </section>
+
+    <aside class="sidebar">
+      <section class="panel sidebar-panel">
+        <div class="section-heading">
+          <p class="section-kicker">Board Guide</p>
+          <h2>사용 방식</h2>
+        </div>
+        <ul class="guide-list">
+          <li>글은 브라우저 로컬 저장소에 보관됩니다.</li>
+          <li>상단 검색창에서 제목, 내용, 태그를 함께 찾습니다.</li>
+          <li>게시글 카드를 누르면 상세 보기와 조회 수가 갱신됩니다.</li>
+        </ul>
+      </section>
+
+      <section class="panel sidebar-panel">
+        <div class="section-heading">
+          <p class="section-kicker">Trending</p>
+          <h2>인기 태그</h2>
+        </div>
+        <div class="tag-cloud" id="tagCloud"></div>
+      </section>
+    </aside>
+
+    <section class="panel toolbar">
+      <div class="toolbar-row">
+        <label class="search-field">
+          <span>검색</span>
+          <input id="searchInput" type="search" placeholder="제목, 내용, 태그 검색">
+        </label>
+        <label>
+          <span>카테고리</span>
+          <select id="categoryFilter">
+            <option value="전체">전체</option>
+          </select>
+        </label>
+        <label>
+          <span>정렬</span>
+          <select id="sortSelect">
+            <option value="recent">최신순</option>
+            <option value="views">조회순</option>
+            <option value="title">제목순</option>
+          </select>
+        </label>
+        <button class="button button-ghost" id="resetFiltersButton" type="button">필터 초기화</button>
+      </div>
+    </section>
+
+    <section class="panel board">
+      <div class="board-header">
+        <div>
+          <p class="section-kicker">Live Feed</p>
+          <h2>게시판</h2>
+        </div>
+        <div class="board-actions">
+          <span class="result-count" id="resultCount">0건</span>
+          <button class="button button-ghost" id="exportButton" type="button">JSON 내보내기</button>
+        </div>
+      </div>
+      <div class="post-list" id="postList"></div>
+      <div class="empty-state hidden" id="emptyState">
+        <h3>표시할 게시물이 없습니다.</h3>
+        <p>검색 조건을 바꾸거나 새 글을 등록해 보세요.</p>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal hidden" id="detailModal" aria-hidden="true">
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+    <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal-close" id="closeModalButton" type="button" aria-label="닫기">×</button>
+      <p class="section-kicker" id="modalCategory">카테고리</p>
+      <h2 id="modalTitle">게시글 제목</h2>
+      <div class="modal-meta" id="modalMeta"></div>
+      <div class="modal-tags" id="modalTags"></div>
+      <p class="modal-content" id="modalContent"></p>
+    </section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
