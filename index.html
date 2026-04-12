@@ -1,0 +1,102 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3-1반 열정 ON!</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <section class="chat-app" aria-label="채팅방 화면">
+      <header class="chat-header">
+        <span class="header-spacer" aria-hidden="true"></span>
+
+        <div class="header-title" id="adminTapTarget" tabindex="0" aria-label="채팅방 제목">
+          <strong>3-1반 열정 ON!</strong>
+          <span>공유 채팅방</span>
+        </div>
+
+        <div class="header-actions">
+          <button class="header-icon" id="refreshButton" type="button" aria-label="새로고침">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 5v6h-6"></path>
+              <path d="M20 11a8 8 0 1 0 2 5.2"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="setup-banner hidden" id="setupBanner">
+        <strong>Supabase 설정이 필요합니다.</strong>
+        <p>`config.js`와 `supabase.sql` 설정을 먼저 완료하세요.</p>
+      </section>
+
+      <main class="chat-room" id="chatRoom">
+        <div class="message-list" id="messageList"></div>
+        <div class="empty-state hidden" id="emptyState">
+          <p id="emptyText">메시지가 아직 없습니다.</p>
+          <button class="empty-button" id="emptyRefreshButton" type="button">새로고침</button>
+        </div>
+      </main>
+
+      <footer class="composer">
+        <div class="sender-indicator">
+          <span>보낼 이름</span>
+          <strong id="authorStatus">익명</strong>
+          <span class="sync-pill" id="syncStatus">연결 준비</span>
+          <span class="sync-pill admin-pill" id="adminStatus">읽기 전용</span>
+          <span class="sync-pill edit-pill hidden" id="editStatus">수정 중</span>
+          <button class="edit-cancel hidden" id="cancelEditButton" type="button">수정 취소</button>
+        </div>
+
+        <form id="messageForm" class="message-form">
+          <div class="admin-meta">
+            <label class="meta-field" for="senderNameInput">
+              <span>이름</span>
+              <input class="meta-input" id="senderNameInput" type="text" maxlength="20" placeholder="보낼 이름" autocomplete="off">
+            </label>
+            <label class="meta-field" for="senderTimeInput">
+              <span>시간</span>
+              <input class="meta-input" id="senderTimeInput" type="datetime-local">
+            </label>
+          </div>
+
+          <div class="composer-row">
+            <div class="mode-badge" aria-hidden="true">
+              <span id="profileButtonText">익</span>
+            </div>
+
+            <div class="input-shell">
+              <textarea
+                id="messageInput"
+                name="message"
+                rows="1"
+                maxlength="400"
+                placeholder="메시지를 입력하세요"
+                required
+              ></textarea>
+              <button class="inline-icon" id="emojiButton" type="button" aria-label="웃는 이모지 추가">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8"></circle>
+                  <path d="M9 10h.01"></path>
+                  <path d="M15 10h.01"></path>
+                  <path d="M9 14c.7.8 1.7 1.2 3 1.2s2.3-.4 3-1.2"></path>
+                </svg>
+              </button>
+              <button class="send-button" id="sendButton" type="submit" aria-label="메시지 전송">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 12 20 5 13 19 11 13 4 12Z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </form>
+      </footer>
+    </section>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
