@@ -1,8 +1,8 @@
 ﻿import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-const PROFILE_ID_KEY = "class-3-1-author-id";
-const PROFILE_NAME_KEY = "class-3-1-author-name";
-const DEFAULT_ROOM_SLUG = "class-3-1-passion-on";
+const PROFILE_ID_KEY = "class-3-2-author-id";
+const PROFILE_NAME_KEY = "class-3-2-author-name";
+const DEFAULT_ROOM_SLUG = "class-3-2-passion-on";
 const DEFAULT_IMAGE_BUCKET = "class-chat-images";
 const DEFAULT_POLL_INTERVAL = 4000;
 const ADMIN_TAP_TARGET = 5;
